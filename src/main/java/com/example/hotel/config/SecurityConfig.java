@@ -22,8 +22,9 @@ public class SecurityConfig {
             // For a simple API demo, disable CSRF. Enable it for form-based apps.
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/public/**", "/actuator/health").permitAll()
+                .requestMatchers("/api/public/**", "/public/**", "/actuator/health").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/admin/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
             )

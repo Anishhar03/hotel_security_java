@@ -1,43 +1,55 @@
 package com.example.hotel.controller;
 
+import com.example.hotel.model.Room;
+import com.example.hotel.service.RoomService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @Validated
+@RequestMapping("/api")
 public class HotelController {
 
-    // Public health/ping endpoint (not under /api)
+    private final RoomService roomService;
+
+    public HotelController(RoomService roomService) {
+        this.roomService = roomService;
+    }
+
+    // Public health/ping endpoint
     @GetMapping(path = "/public/ping")
     public ResponseEntity<String> ping() {
         return ResponseEntity.ok("ok");
     }
 
     // Authenticated endpoint: any authenticated user can view rooms
-    @GetMapping("/api/rooms")
-    public List<String> listRooms() {
-        return List.of("101", "102", "201");
+    @GetMapping("/rooms")
+    public List<Room> listRooms() {
+        return roomService.listRooms();
     }
 
-    // Admin-only endpoint: create a room
-    @PostMapping("/api/admin/rooms")
-    public ResponseEntity<String> createRoom(@Valid @RequestBody RoomRequest request) {
-        return ResponseEntity.ok("Created room " + request.getNumber());
+    // Admin-only endpoint: create or update a room
+    @PostMapping("/admin/rooms")
+    public ResponseEntity<Room> createRoom(@Valid @RequestBody Room request) {
+        Room saved = roomService.createOrUpdate(request);
+        return ResponseEntity.ok(saved);
     }
 
-    public static class RoomRequest {
-        @NotBlank
-        private String number;
+    @GetMapping("/rooms/{number}")
+    public ResponseEntity<Room> getRoom(@PathVariable String number) {
+        Optional<Room> room = roomService.getByNumber(number);
+        return room.map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
 
-        public RoomRequest() {}
-        public RoomRequest(String number) { this.number = number; }
-
-        public String getNumber() { return number; }
-        public void setNumber(String number) { this.number = number; }
+    @DeleteMapping("/admin/rooms/{number}")
+    public ResponseEntity<Void> deleteRoom(@PathVariable String number) {
+        roomService.delete(number);
+        return ResponseEntity.noContent().build();
     }
 }
