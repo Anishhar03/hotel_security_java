@@ -1,0 +1,15 @@
+services:
+  hotel-security:
+    build: .
+    image: hotel-security:local
+    ports:
+      - "8080:8080"
+    environment:
+      HOTEL_STORAGE_ROOMS_FILE: /app/data/rooms-db.txt
+      HOTEL_STORAGE_AUDIT_FILE: /app/data/audit-log.txt
+    volumes:
+      - hotel-security-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  hotel-security-data:

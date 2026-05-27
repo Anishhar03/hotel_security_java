@@ -1,350 +1,247 @@
-Hotel Security – Java Backend + React Frontend + File Database
-=============================================================
+Hotel Security - Spring Boot and React
+======================================
 
-This project is a **simple hotel room management system** that demonstrates:
+This project is a fully runnable hotel security operations dashboard with:
 
-- **Java Spring Boot 3 backend**
-- **React + Vite frontend**
-- **File-based storage** used as a very lightweight "database"
-- **Spring Security** with HTTP Basic auth and role-based access control
+- Spring Boot 3 backend
+- React and Vite frontend
+- HTTP Basic authentication with staff/admin roles
+- File-based room and audit storage
+- Room filtering, stats, status transitions, and admin audit history
+- A production-style single jar that serves the built React app
+- Docker and GitHub Actions deployment workflow
 
-It is intended as a clear, minimal, but fully functional example that you can run locally and extend.
+Redis and Kafka are not required for this application. The current workload is synchronous local room operations and audit logging, so adding message brokers or caches would make local deployment heavier without improving the core behavior.
 
---------------------------------------------------------------------------------
+Architecture
+------------
 
-High‑Level Architecture
------------------------
+Backend:
 
-- **Backend**
-  - Framework: **Spring Boot 3 (Java 17)**.
-  - Security: **Spring Security** with in-memory users and HTTP Basic auth.
-  - Purpose: Exposes secured REST endpoints for managing hotel rooms.
-  - Persistence: Uses a **plain text file** (`rooms-db.txt`) as the data store.
+- Java 17
+- Spring Boot Web, Security, and Validation
+- In-memory demo users
+- Room operations API under `/api`
+- Public health/ping endpoints
+- File-backed repositories using `rooms-db.txt` and `audit-log.txt`
 
-- **Frontend**
-  - Framework: **React 18**, built with **Vite**.
-  - Purpose: SPA that lets you:
-    - Sign in with staff or admin credentials.
-    - View the list of rooms.
-    - (Admin) Add / update / delete rooms.
-  - Dev server: Proxies `/api` and `/public` to the backend, so no CORS issues.
-
-- **"Database"**
-  - A single file in the project root called **`rooms-db.txt`**.
-  - Each line represents one room in the format:
-
-    `roomNumber|roomType|status`
-
-    Example:
-
-    `101|Deluxe|AVAILABLE`
-
---------------------------------------------------------------------------------
-
-Backend – Details
------------------
-
-### Tech stack
-
-- Java 17+
-- Spring Boot 3 (web + security + validation)
-
-### Main packages / classes
-
-- `com.example.hotel.HotelApplication`
-  - Standard Spring Boot entry point.
-
-- `com.example.hotel.config.SecurityConfig`
-  - Configures:
-    - HTTP Basic and form login.
-    - CSRF disabled (for simplicity with API + SPA).
-    - Authorization rules:
-      - Public:
-        - `GET /public/ping`
-        - `GET /api/public/**`
-        - `GET /actuator/health`
-      - Authenticated:
-        - `GET /api/rooms`
-        - `GET /api/rooms/{number}`
-      - Admin only:
-        - `POST /api/admin/rooms`
-        - `DELETE /api/admin/rooms/{number}`
-  - Defines in-memory users:
-    - `admin / admin123` with role `ADMIN`
-    - `staff / staff123` with role `STAFF`
-
-- `com.example.hotel.model.Room`
-  - Simple POJO representing a room:
-    - `number` (String)
-    - `type` (String)
-    - `status` (String – e.g. `AVAILABLE`, `OCCUPIED`, `MAINTENANCE`)
-
-- `com.example.hotel.repository.FileRoomRepository`
-  - File-based repository using `rooms-db.txt`.
-  - Responsibilities:
-    - **Read all rooms** from the file.
-    - **Find by room number**.
-    - **Save** (create or update) a room.
-    - **Delete** by room number.
-  - Uses a `ReentrantLock` to keep read/write operations thread-safe.
-  - File format per line:
-
-    `number|type|status`
-
-- `com.example.hotel.service.RoomService`
-  - Service layer on top of `FileRoomRepository`.
-  - Methods:
-    - `listRooms()`
-    - `createOrUpdate(Room room)`
-    - `getByNumber(String number)`
-    - `delete(String number)`
-
-- `com.example.hotel.controller.HotelController`
-  - Annotated with `@RestController` and `@RequestMapping("/api")`.
-  - Endpoints:
-    - **Health / public**
-      - `GET /api/public/ping` (or via security config also `/public/ping`):
-        - Returns `"ok"`, no auth required.
-    - **Rooms (authenticated)**
-      - `GET /api/rooms`
-        - Returns JSON array of rooms from the file DB.
-      - `GET /api/rooms/{number}`
-        - Returns one room or `404` if it does not exist.
-    - **Admin (requires role ADMIN)**
-      - `POST /api/admin/rooms`
-        - Body: JSON of a `Room`:
-
-          ```json
-          {
-            "number": "101",
-            "type": "Deluxe",
-            "status": "AVAILABLE"
-          }
-          ```
-
-        - Creates a new room or updates an existing room with that `number`.
-      - `DELETE /api/admin/rooms/{number}`
-        - Deletes the room with that `number` if it exists.
-
---------------------------------------------------------------------------------
-
-Frontend – Details
-------------------
-
-The frontend lives in the `frontend` directory and is a small React app.
-
-### Tech stack
+Frontend:
 
 - React 18
-- Vite 5
-- Vanilla CSS for styling (modern, dark themed UI)
+- Vite
+- Calls backend endpoints through `/api`
+- Supports staff room viewing and admin room management/audit workflows
 
-### Key files
+Storage:
 
-- `frontend/package.json`
-  - Defines scripts:
-    - `npm run dev` – start Vite dev server.
-    - `npm run build` – build for production.
+- `rooms-db.txt` in the project root
+- `audit-log.txt` in the project root
+- Runtime files are created automatically if needed.
+- Room data is stored in a versioned, Base64-safe line format so notes and names can contain ordinary text safely.
 
-- `frontend/vite.config.mts`
-  - Configures dev server:
-    - Runs on port `5173` by default.
-    - Proxies:
-      - `/api` -> `http://localhost:8080`
-      - `/public` -> `http://localhost:8080`
-    - This means from the React app you can call `/api/...` directly and it will
-      reach the backend without CORS issues in development.
+For a complete explanation of every file, workflow, endpoint, and command, read `PROJECT_GUIDE.md`.
 
-- `frontend/src/main.jsx`
-  - Mounts the React app into `index.html`.
-
-- `frontend/src/App.jsx`
-  - Main UI:
-    - **Authentication section**
-      - Username and password inputs.
-      - Default values:
-        - `staff / staff123`
-      - Builds an `Authorization: Basic ...` header for backend calls.
-    - **Rooms list**
-      - Calls `GET /api/rooms`.
-      - Shows room number, type, and status.
-      - If logged in as `admin`, you can delete a room via the Delete button
-        (which calls `DELETE /api/admin/rooms/{number}`).
-    - **Add / Update room form (admin)**
-      - Room number, type, status.
-      - Calls `POST /api/admin/rooms`.
-      - If the room already exists by number, it is updated; otherwise, created.
-    - Shows error messages and loading states.
-
-- `frontend/src/style.css`
-  - Provides a modern, responsive dark UI with:
-    - Cards
-    - Simple grid layout
-    - Color-coded statuses
-
---------------------------------------------------------------------------------
+For the day-to-day run/build/deploy process, read `WORKFLOW_GUIDE.md`.
 
 Prerequisites
 -------------
 
-- **Java**
-  - JDK **17+**
-  - `JAVA_HOME` set to your JDK installation.
+- JDK 17 or newer
+- Node.js 18 or newer
+- npm
 
-- **Node.js + npm**
-  - Node.js 18+ is recommended.
-  - npm (comes with Node).
+On this machine, Java 17 is available at:
 
-- **Git** (if you’re cloning from GitHub)
-
---------------------------------------------------------------------------------
-
-How to Run the Project Locally
-------------------------------
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/Anishhar03/hotel_security_java.git
-cd hotel_security_java
+```powershell
+C:\Program Files\Eclipse Adoptium\jdk-17.0.17.10-hotspot
 ```
 
-### 2. Start the backend (Spring Boot)
+The default `java` on the machine may be Java 8, so use the Java 17 executable directly or set `JAVA_HOME` before running Maven/Spring Boot.
 
-Using the Maven wrapper included in the repo:
+Build and Run as a Single Deployed App
+--------------------------------------
 
-```bash
-cd hotel_security_java
-.\mwdist\mvnw.cmd spring-boot:run
+From the project root:
+
+```powershell
+cd frontend
+npm install
+npm run build
+cd ..
+.\mvnw.cmd package
+& 'C:\Program Files\Eclipse Adoptium\jdk-17.0.17.10-hotspot\bin\java.exe' -jar target\hotel-security-0.0.1-SNAPSHOT.jar
 ```
 
-or on Unix-like systems:
+Open:
 
-```bash
-./mwdist/mvnw spring-boot:run
+```text
+http://localhost:8080/
 ```
 
-By default, the backend runs on: `http://localhost:8080`
+The packaged Spring Boot app serves the React production build from the jar.
 
-### 3. Start the frontend (React + Vite)
+Docker Run
+----------
 
-In a new terminal:
+```powershell
+docker compose up --build
+```
 
-```bash
+Open:
+
+```text
+http://localhost:8080/
+```
+
+GitHub Workflow
+---------------
+
+The GitHub Actions workflow at `.github/workflows/build-and-deploy.yml` builds the frontend, runs backend tests, packages the jar, builds a Docker image, and publishes the image to GitHub Container Registry on pushes to `main`.
+
+Development Run
+---------------
+
+Backend:
+
+```powershell
+& 'C:\Program Files\Eclipse Adoptium\jdk-17.0.17.10-hotspot\bin\java.exe' -version
+.\mvnw.cmd spring-boot:run
+```
+
+Frontend, in another terminal:
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-Vite will print a URL like: `http://localhost:5173`
+Open the Vite URL shown in the terminal, usually:
 
-Open that URL in your browser.
+```text
+http://localhost:5173/
+```
 
---------------------------------------------------------------------------------
+The Vite dev server proxies `/api` and `/public` to `http://localhost:8080`.
 
 Login Credentials
 -----------------
 
-- **Staff (view only)**
-  - Username: `staff`
-  - Password: `staff123`
+Staff user:
 
-- **Admin (manage rooms)**
-  - Username: `admin`
-  - Password: `admin123`
+```text
+username: staff
+password: staff123
+```
 
-Staff can view rooms but cannot create / update / delete them. Admin can do all operations.
+Admin user:
 
---------------------------------------------------------------------------------
+```text
+username: admin
+password: admin123
+```
 
-API Reference (Quick)
----------------------
+Staff users can view rooms. Admin users can create, update, and delete rooms.
 
-Base URL: `http://localhost:8080`
+API Reference
+-------------
 
-All secured endpoints use HTTP Basic authentication.
+Base URL:
 
-### Public
+```text
+http://localhost:8080
+```
+
+Public:
 
 - `GET /public/ping`
-  - Response: `"ok"`
-  - No authentication required.
+- `GET /api/public/ping`
+- `GET /actuator/health`
 
-### Rooms (Authenticated)
+Authenticated:
 
 - `GET /api/rooms`
-  - Auth: `staff` or `admin`.
-  - Response: JSON array of rooms.
-
 - `GET /api/rooms/{number}`
-  - Auth: `staff` or `admin`.
-  - Response: JSON room or `404`.
+- `GET /api/rooms/stats`
+- `GET /api/rooms?status=AVAILABLE&sort=price`
 
-### Admin (Role ADMIN)
+Admin only:
 
 - `POST /api/admin/rooms`
-  - Auth: `admin/admin123`.
-  - Body:
-
-    ```json
-    {
-      "number": "101",
-      "type": "Deluxe",
-      "status": "AVAILABLE"
-    }
-    ```
-
-  - Creates or updates the room with that number.
-
+- `PATCH /api/admin/rooms/{number}/status`
 - `DELETE /api/admin/rooms/{number}`
-  - Auth: `admin/admin123`.
-  - Deletes the given room.
+- `GET /api/admin/audit`
 
---------------------------------------------------------------------------------
+Example request body for creating or updating a room:
 
-Examples with curl
-------------------
+```json
+{
+  "number": "305",
+  "type": "Suite",
+  "status": "AVAILABLE",
+  "floor": 3,
+  "pricePerNight": 2600,
+  "occupantName": "",
+  "notes": "Quiet side"
+}
+```
+
+Quick Validation
+----------------
 
 Public ping:
 
-```bash
-curl http://localhost:8080/public/ping
+```powershell
+curl.exe -sS http://localhost:8080/public/ping
 ```
 
-List rooms (staff):
+List rooms:
 
-```bash
-curl -u staff:staff123 http://localhost:8080/api/rooms
+```powershell
+curl.exe -sS -u staff:staff123 http://localhost:8080/api/rooms
 ```
 
-Create or update a room (admin):
+Create or update a room:
 
-```bash
-curl -u admin:admin123 \
-  -H "Content-Type: application/json" \
-  -d '{"number":"305","type":"Suite","status":"AVAILABLE"}' \
-  http://localhost:8080/api/admin/rooms
+```powershell
+Invoke-RestMethod -Uri 'http://localhost:8080/api/admin/rooms' -Method Post -Headers @{Authorization=('Basic ' + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes('admin:admin123')))} -ContentType 'application/json' -Body '{"number":"305","type":"Suite","status":"AVAILABLE","floor":3,"pricePerNight":2600,"occupantName":"","notes":"Quiet side"}'
 ```
 
-Delete a room (admin):
+Delete a room:
 
-```bash
-curl -u admin:admin123 -X DELETE \
-  http://localhost:8080/api/admin/rooms/305
+```powershell
+curl.exe -sS -o NUL -w "%{http_code}" -u admin:admin123 -X DELETE http://localhost:8080/api/admin/rooms/305
 ```
 
---------------------------------------------------------------------------------
+Project Structure
+-----------------
 
-Notes and Limitations
----------------------
+```text
+.
+|-- .mvn/wrapper/
+|-- frontend/
+|   |-- src/
+|   |-- dist/
+|   `-- package.json
+|-- src/main/java/com/example/hotel/
+|   |-- config/
+|   |-- controller/
+|   |-- model/
+|   |-- repository/
+|   `-- service/
+|-- pom.xml
+|-- mvnw.cmd
+|-- rooms-db.txt
+|-- audit-log.txt
+|-- PROJECT_GUIDE.md
+|-- WORKFLOW_GUIDE.md
+`-- README.md
+```
 
-- The **file database** is intentionally simple:
-  - No transactions.
-  - Entire file rewritten on each save/delete.
-  - Not suitable for production, but excellent for demos and learning.
-- Passwords use `{noop}` encoding:
-  - Do **not** use as-is in production.
-  - Replace with BCrypt (`{bcrypt}`) for real applications.
-- CSRF is disabled to simplify SPA + API integration:
-  - For a production web app, enable and configure CSRF protection properly.
+Notes
+-----
 
+- This is a demo-ready local deployment, not a hardened production system.
+- Demo passwords use `{noop}` encoding and should be replaced with BCrypt before real use.
+- CSRF is disabled to keep the SPA/API demo simple.
+- File storage is intentionally small and local. Use a real database before exposing the app to production traffic.

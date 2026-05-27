@@ -1,0 +1,11 @@
+.git
+.github
+target
+frontend/node_modules
+frontend/dist
+rooms-db.txt
+audit-log.txt
+mwdist
+maven-wrapper.zip
+*.log
+*.iml

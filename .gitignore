@@ -4,4 +4,9 @@
 /.classpath
 /.settings/
 *.iml
-.mvn/
+rooms-db.txt
+audit-log.txt
+frontend/node_modules/
+frontend/dist/
+mwdist/
+maven-wrapper.zip

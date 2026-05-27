@@ -1,12 +1,24 @@
 package com.example.hotel.controller;
 
+import com.example.hotel.model.AuditEvent;
 import com.example.hotel.model.Room;
+import com.example.hotel.model.RoomStats;
+import com.example.hotel.model.StatusChangeRequest;
 import com.example.hotel.service.RoomService;
-import org.springframework.http.ResponseEntity;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
-
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -21,23 +33,24 @@ public class HotelController {
         this.roomService = roomService;
     }
 
-    // Public health/ping endpoint
     @GetMapping(path = "/public/ping")
     public ResponseEntity<String> ping() {
         return ResponseEntity.ok("ok");
     }
 
-    // Authenticated endpoint: any authenticated user can view rooms
     @GetMapping("/rooms")
-    public List<Room> listRooms() {
-        return roomService.listRooms();
+    public List<Room> listRooms(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) Integer floor,
+            @RequestParam(required = false, name = "q") String query,
+            @RequestParam(required = false) String sort) {
+        return roomService.listRooms(status, type, floor, query, sort);
     }
 
-    // Admin-only endpoint: create or update a room
-    @PostMapping("/admin/rooms")
-    public ResponseEntity<Room> createRoom(@Valid @RequestBody Room request) {
-        Room saved = roomService.createOrUpdate(request);
-        return ResponseEntity.ok(saved);
+    @GetMapping("/rooms/stats")
+    public RoomStats stats() {
+        return roomService.stats();
     }
 
     @GetMapping("/rooms/{number}")
@@ -47,9 +60,39 @@ public class HotelController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    @PostMapping("/admin/rooms")
+    public ResponseEntity<Room> createRoom(@Valid @RequestBody Room request, Authentication authentication) {
+        Room saved = roomService.createOrUpdate(request, actor(authentication));
+        return ResponseEntity.ok(saved);
+    }
+
+    @PatchMapping("/admin/rooms/{number}/status")
+    public ResponseEntity<Room> changeStatus(
+            @PathVariable String number,
+            @Valid @RequestBody StatusChangeRequest request,
+            Authentication authentication) {
+        return roomService.changeStatus(
+                        number,
+                        request.getStatus(),
+                        request.getOccupantName(),
+                        request.getNotes(),
+                        actor(authentication))
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     @DeleteMapping("/admin/rooms/{number}")
-    public ResponseEntity<Void> deleteRoom(@PathVariable String number) {
-        roomService.delete(number);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<Void> deleteRoom(@PathVariable String number, Authentication authentication) {
+        boolean removed = roomService.delete(number, actor(authentication));
+        return removed ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+    }
+
+    @GetMapping("/admin/audit")
+    public List<AuditEvent> audit(@RequestParam(defaultValue = "25") int limit) {
+        return roomService.recentAuditEvents(limit);
+    }
+
+    private String actor(Authentication authentication) {
+        return authentication == null ? "system" : authentication.getName();
     }
 }
