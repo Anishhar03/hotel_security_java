@@ -7,11 +7,10 @@ RUN npm run build
 
 FROM maven:3.9.9-eclipse-temurin-17 AS backend
 WORKDIR /app
-COPY pom.xml mvnw ./
-COPY .mvn .mvn
+COPY pom.xml ./
 COPY src src
 COPY --from=frontend /app/frontend/dist frontend/dist
-RUN chmod +x mvnw && ./mvnw -q -DskipTests package
+RUN mvn -q -DskipTests package
 
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
